@@ -3,9 +3,7 @@
 #include "main.h"
 #include "RLE.h"
 
-int main() {
-	something();
-	printf("Hello?\n");
-
+int something() {
+	printf("Something worked.\n");
 	return 0;
 }
