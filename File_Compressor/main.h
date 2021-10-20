@@ -20,22 +20,27 @@
 #define LOG_FILENAME "rle_compressed.log"
 
 /*
-*
+* Handles file compression sequence.
 */
-static int handle_rle_pack();
+static int handle_rle_pack(const char *filename_to_pack);
+
 /*
-*
+* Handles file decompression sequence.
 */
-static int handle_rle_unpack();
-/*
-*
-*/
-static int view_log();
+static int handle_rle_unpack(const char *filename_to_unpack);
+
 /*
 * Prints menu on the console screen.
 */
 static void print_menu();
 
-static int get_command(FILE **file);
+/*
+* Gets correct command from the user.
+* Returns number of command and a filename of the existing file, if received any.
+*/
+static int get_command(char **filename);
 
+/*
+* Gets filename from command string.
+*/
 static void command_get_filename(const char *command_string, char **filename);

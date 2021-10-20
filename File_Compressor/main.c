@@ -2,40 +2,39 @@
 
 #include "main.h"
 #include "RLE.h"
+#include "logger.h"
 
 int main() {
 	int command = 0;
-	FILE *file = NULL;
+	char *filename = NULL;
 
 	print_menu();
 	while (command != 5) {
 		printf("Input: ");
-		command = get_command(&file);
+		command = get_command(&filename);
 		switch (command)
 		{
-		case 1:
+		case 1: //rle pack
 			DEBUGPRINT("Case 1 execution\n");
-			char temp[255];
-			fscanf(file, "%s", temp);
-			printf("%s\n", temp);
-			//rle pack
-			//handle_rle_pack();
+			handle_rle_pack(filename);
+			free(filename);
+			filename = NULL;
 			break;
-		case 2:
+		case 2: //rle unpack
 			DEBUGPRINT("Case 2 execution\n");
-			//rle unpack
-			//handle_rle_unpack();
+			handle_rle_unpack(filename);
+			free(filename);
+			filename = NULL;
 			break;
-		case 3:
+		case 3: //view log
 			DEBUGPRINT("Case 3 execution\n");
-			//view log
-			//print_log();
+			view_log(LOG_FILENAME);
 			break;
-		case 4:
+		case 4: //print menu
 			DEBUGPRINT("Case 4 execution\n");
 			print_menu();
 			break;
-		case 5:
+		case 5: //exit
 			DEBUGPRINT("Case 5 execution\n");
 			printf("Exitting program.\n");
 			break;
@@ -50,21 +49,55 @@ int main() {
 }
 
 /*
-*
+* Handles file compression sequence.
 */
-static int handle_rle_pack() {
+static int handle_rle_pack(const char *filename_to_pack) {
+	FILE *file_to_pack = fopen(filename_to_pack, "rb");
+	uint8_t *fbytes = NULL; //Array of bytes from the file.
+	size_t size = 0; //Size of an array of bytes.
+	char *new_filename = NULL; //New name for file.
+	int check = 0;
+
+	check = file_in(file_to_pack, &fbytes, &size);
+	if (!check) {
+#if DEBUG
+		printf("Data array:\n");
+		for (unsigned int i = 0; i < size; i++) {
+			printf("%c", fbytes[i]);
+		}
+		printf("\n\n");
+#endif
+		//rle_pack();
+		//get_new_name();
+		//file_out();
+	}
+	fclose(file_to_pack);
+
+	//log_add_entry(); //filename_to_pack - .* + .bmp
+	
 	return 0;
 }
+
 /*
-*
+* Handles file decompression sequence.
 */
-static int handle_rle_unpack() {
-	return 0;
-}
-/*
-*
-*/
-static int view_log() {
+static int handle_rle_unpack(const char *filename_to_unpack) {
+	FILE *file_to_unpack = fopen(filename_to_unpack, "rb");
+	uint8_t *fbytes = NULL; //Array of bytes from the file.
+	size_t size = 0; //Size of an array of bytes.
+	char *new_filename = NULL; //New name for file.
+	bool entry = false;
+
+	//entry = log_check_entry();
+	//file_in();
+	//rle_unpack();
+	//log_retrieve_name();
+	//file_out();
+
+	fclose(file_to_unpack);
+
+	//log_remove_entry();
+
 	return 0;
 }
 
@@ -85,15 +118,19 @@ static void print_menu() {
 
 /*
 * Gets correct command from the user.
-* Returns number of command and a file, if received any.
+* Returns number of command and a filename of the existing file, if received any.
 */
-static int get_command(FILE **file) {
+static int get_command(char **filename) {
+	FILE *file;
 	char *command = (char *)malloc(MAX_COMMAND * sizeof(char)); //Command string.
 	if (command == NULL) {
 		return 0;
 	}
 	char *command_ptr = NULL; //Pointer to the command string.
-	char *filename = NULL; //Nulling out filename.
+	if (*filename != NULL) {
+		free(*filename);
+		*filename = NULL; //Nulling out filename.
+	}
 
 	while (1) {
 		command_ptr = fgets(command, MAX_COMMAND, stdin); //Getting command string.
@@ -110,15 +147,15 @@ static int get_command(FILE **file) {
 					if (sscanf(command_ptr, "%*s %s", temp) == 1) {
 						// pack [filename]
 						if (!strcmp(temp, "pack")) {
-							command_get_filename(command, &filename); //Getting filename from command.
-							if (filename != NULL) {
+							command_get_filename(command, filename); //Getting filename from command.
+							if (*filename != NULL) {
 								//Try to open the file.
-								*file = fopen(filename, "rb");
+								file = fopen(*filename, "rb");
 								//File found -> can continue.
-								if (*file != NULL) {
-									//Nulling filename.
-									free(filename);
-									filename = NULL;
+								if (file != NULL) {
+									rewind(file);
+									fclose(file);
+									file = NULL;
 
 									free(temp);
 									temp = NULL;
@@ -128,11 +165,11 @@ static int get_command(FILE **file) {
 								}
 								//File wasn't found.
 								else {
-									printf("Unable to open the \"%s\" file. It must be in the same directory with the .c file.\n\nInput: ", filename);
+									printf("Unable to open the \"%s\" file. It must be in the same directory with the .c file.\n\nInput: ", *filename);
 								}
 								//Nulling filename.
-								free(filename);
-								filename = NULL;
+								free(*filename);
+								*filename = NULL;
 							}
 							//No filename provided.
 							else {
@@ -141,15 +178,15 @@ static int get_command(FILE **file) {
 						}
 						// unpack [filename]
 						else if (!strcmp(temp, "unpack")) {
-							command_get_filename(command, &filename); //Getting filename from command.
-							if (filename != NULL) {
+							command_get_filename(command, filename); //Getting filename from command.
+							if (*filename != NULL) {
 								//Try to open the file.
-								*file = fopen(filename, "rb");
+								file = fopen(*filename, "rb");
 								//File found -> can continue.
-								if (*file != NULL) {
-									//Nulling filename.
-									free(filename);
-									filename = NULL;
+								if (file != NULL) {
+									rewind(file);
+									fclose(file);
+									file = NULL;
 
 									free(temp);
 									temp = NULL;
@@ -159,11 +196,11 @@ static int get_command(FILE **file) {
 								}
 								//File wasn't found.
 								else {
-									printf("Unable to open the \"%s\" file. It must be in the same directory with the .c file.\n\nInput: ", filename);
+									printf("Unable to open the \"%s\" file. It must be in the same directory with the .c file.\n\nInput: ", *filename);
 								}
 								//Nulling filename.
-								free(filename);
-								filename = NULL;
+								free(*filename);
+								*filename = NULL;
 							}
 							//No filename provided.
 							else {
@@ -217,7 +254,7 @@ static int get_command(FILE **file) {
 }
 
 /*
-* Gets filename from command string
+* Gets filename from command string.
 */
 static void command_get_filename(const char *command_string, char **filename) {
 	int length = 0;
