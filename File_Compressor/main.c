@@ -67,13 +67,20 @@ static int handle_rle_pack(const char *filename_to_pack) {
 		}
 		printf("\n\n");
 #endif
-		//rle_pack();
+		rle_pack(&fbytes, &size);
+#if DEBUG
+		printf("New array:\n");
+		for (unsigned int i = 0; i < size; i++) {
+			printf("%2x ", fbytes[i]);
+		}
+		printf("\n\n");
+#endif
 		//get_new_name();
 		//file_out();
+		
+		//log_add_entry(); //filename_to_pack - .* + .bmp
 	}
 	fclose(file_to_pack);
-
-	//log_add_entry(); //filename_to_pack - .* + .bmp
 	
 	return 0;
 }
@@ -87,16 +94,20 @@ static int handle_rle_unpack(const char *filename_to_unpack) {
 	size_t size = 0; //Size of an array of bytes.
 	char *new_filename = NULL; //New name for file.
 	bool entry = false;
+	int check = 0;
 
 	//entry = log_check_entry();
-	//file_in();
-	//rle_unpack();
-	//log_retrieve_name();
-	//file_out();
+	check = file_in(filename_to_unpack, &fbytes, &size);
+	if (!check) {
+		//rle_unpack();
+		//log_retrieve_name();
+		//file_out();
+
+		//log_remove_entry();
+	}
+	
 
 	fclose(file_to_unpack);
-
-	//log_remove_entry();
 
 	return 0;
 }
