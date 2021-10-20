@@ -24,7 +24,7 @@ uint16_t crc16(const uint8_t *data_p, unsigned int length) {
 
 /*
 * Encodes given data array by rle rules.
-* Returns 1 in case of an error. 0 on success.
+* Returns 1 on error. 0 on success.
 */
 size_t rle_pack(uint8_t **array, size_t *size) {
 	if (*size == 0) return 1; //Array size must be bigger than zero.

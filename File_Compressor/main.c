@@ -50,6 +50,7 @@ int main() {
 
 /*
 * Handles file compression sequence.
+* Returns 1 in case of an error. 0 on success.
 */
 static int handle_rle_pack(const char *filename_to_pack) {
 	FILE *file_to_pack = fopen(filename_to_pack, "rb");
@@ -58,7 +59,16 @@ static int handle_rle_pack(const char *filename_to_pack) {
 	char *new_filename = NULL; //New name for file.
 	int check = 0;
 
-	check = file_in(file_to_pack, &fbytes, &size);
+	new_filename = malloc((strlen(filename_to_pack) + 1) * sizeof(char));
+
+	if (new_filename == NULL) {
+		return 1;
+	}
+
+	strcpy(new_filename, filename_to_pack); //Getting old name first.
+
+	check = file_in(file_to_pack, &fbytes, &size); //Getting file contents.
+	fclose(file_to_pack); //Closing file.
 	if (!check) {
 #if DEBUG
 		printf("Data array:\n");
@@ -67,7 +77,7 @@ static int handle_rle_pack(const char *filename_to_pack) {
 		}
 		printf("\n\n");
 #endif
-		rle_pack(&fbytes, &size);
+		rle_pack(&fbytes, &size); //Compressing file contents.
 #if DEBUG
 		printf("New array:\n");
 		for (unsigned int i = 0; i < size; i++) {
@@ -75,12 +85,18 @@ static int handle_rle_pack(const char *filename_to_pack) {
 		}
 		printf("\n\n");
 #endif
-		//get_new_name();
-		//file_out();
+		get_new_name(&new_filename); //Getting new file name (One with .bmp extension).
+#if DEBUG
+		printf("Creating %s file\n", new_filename);
+#endif
+
+		file_to_pack = fopen(new_filename, "wb");
+		file_out(file_to_pack, fbytes, size);
+		fclose(file_to_pack);
 		
 		//log_add_entry(); //filename_to_pack - .* + .bmp
 	}
-	fclose(file_to_pack);
+	
 	
 	return 0;
 }
