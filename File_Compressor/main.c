@@ -50,6 +50,7 @@ int main() {
 
 /*
 * Handles file compression sequence.
+* const char *filename_to_pack - name of the file to pack.
 * Returns 1 in case of an error. 0 on success.
 */
 static int handle_rle_pack(const char *filename_to_pack) {
@@ -112,23 +113,30 @@ static int handle_rle_pack(const char *filename_to_pack) {
 
 /*
 * Handles file decompression sequence.
+* const char *filename_to_unpack - name of the file to unpack. (must be logged, if it is not - nothing will be done)
 */
 static int handle_rle_unpack(const char *filename_to_unpack) {
 	FILE *file_to_unpack = fopen(filename_to_unpack, "rb");
 	uint8_t *fbytes = NULL; //Array of bytes from the file.
 	size_t size = 0; //Size of an array of bytes.
 	char *new_filename = NULL; //New name for file.
-	bool entry = false;
 	int check = 0;
 
-	//entry = log_check_entry();
-	check = file_in(filename_to_unpack, &fbytes, &size);
-	if (!check) {
-		//rle_unpack();
-		//log_retrieve_name();
-		//file_out();
+	if (log_check_entry(LOG_FILENAME, filename_to_unpack)) {
+		check = file_in(filename_to_unpack, &fbytes, &size);
+		if (!check) {
+			//rle_unpack();
+			//log_retrieve_name();
+			//file_out();
 
-		//log_remove_entry();
+			//log_remove_entry();
+		}
+	}
+	else {
+		//There is no entry in the log file.
+		//Much harder algorithm must be used to deal with that, which is not demanded by the task.
+		//Just prompt user with warning.
+		printf("Impossible to unpack \"%s\" file.\nIt was not packed by this program, or was already unpacked.\nPlease, check the log for files that can be unpacked.\n", filename_to_unpack);
 	}
 	
 
@@ -154,6 +162,7 @@ static void print_menu() {
 
 /*
 * Gets correct command from the user.
+* char **filename - ponter to the string with the filename. Name of the file received by the command will be returned here.
 * Returns number of command and a filename of the existing file, if received any.
 */
 static int get_command(char **filename) {
@@ -291,6 +300,8 @@ static int get_command(char **filename) {
 
 /*
 * Gets filename from command string.
+* const char *command_string - string with command. (e.g "rle pack a.txt")
+* char **filename - pointer to the name of the file, which will be retuned.
 */
 static void command_get_filename(const char *command_string, char **filename) {
 	int length = 0;

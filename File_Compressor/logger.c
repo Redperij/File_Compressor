@@ -5,15 +5,30 @@
 
 /*
 * Prints log to the user.
+* const char *filename_log - name of the log file.
 */
 int view_log(const char *filename_log) {
 	FILE *log_file = fopen(filename_log, "r");
+	LOGGED_FILE *entries = NULL;
+	size_t size;
+
 	if (log_file == NULL) {
 		printf("Log is empty. No files are encrypted.\n");
 		return 1;
 	}
-	
+
+	size = read_log(log_file, &entries);
 	//TODO: Show the log file. (not demanded, but why not?)
+
+
+	for (size_t i = 0; i < size; i++) {
+#pragma warning (disable:6001) //Nope, they are initialized. size won't increase if they are not.
+			free(entries[i].comp_name);
+			free(entries[i].orig_name);
+#pragma warning (restore:6001)
+		}
+	free(entries);
+	entries = NULL;
 
 	fclose(log_file);
 	return 0;
@@ -21,6 +36,9 @@ int view_log(const char *filename_log) {
 
 /*
 * Reads all file contents into data array.
+* FILE *file - opened file in binary format to read from.
+* uint8_t **data - ponter to the data array to read to.
+* size_t *size - pointer to the size of the data array. (size will be returned to that)
 * Returns: '2' in case of memory mistake. '1' in case if no file was provided. '0' in case of success.
 */
 int file_in(FILE *file, uint8_t **data, size_t *size) {
@@ -61,12 +79,16 @@ int file_in(FILE *file, uint8_t **data, size_t *size) {
 
 /*
 * Writes all data contents into the file.
+* FILE *file - opened file in binary format to write data to.
+* const uint8_t *data - array with data to write.
+* const size_t size - size of the data array.
+* const uint16_t crc - checksum to pu as a header. If specified as 0 nothing will be added before the data.
 * Returns 1 on error. 0 on success.
 */
 int file_out(FILE *file, const uint8_t *data, const size_t size, const uint16_t crc) {
 	if (file == NULL) return 1; //file must be provided.
 	
-	fwrite(&crc, 2, 1, file); //Add crc as a header.
+	if (crc != 0) fwrite(&crc, 2, 1, file); //Add crc as a header.
 	//Write all data contents to the file.
 	for (size_t i = 0; i < size; i++) {
 		fwrite(&data[i], 1, 1, file);
@@ -77,6 +99,7 @@ int file_out(FILE *file, const uint8_t *data, const size_t size, const uint16_t 
 
 /*
 * Gets new name for the file. Cuts the end of the name in case of reaching the limit. (Shouldn't happen, at least not on a daily basis)
+* char **string - pointer to the string with the old name.
 * Returns 1 on error. 0 on success.
 */
 int get_new_name(char **string) {
@@ -115,6 +138,8 @@ int get_new_name(char **string) {
 
 /*
 * Checks log entries for given filename.
+* const char *filename_log - name of the log file.
+* const char *comp_filename - string with the name of the comressed file.
 * True - entry exists, false - no such entry found.
 */
 bool log_check_entry(const char *filename_log, const char *comp_filename) {
@@ -161,15 +186,47 @@ bool log_check_entry(const char *filename_log, const char *comp_filename) {
 
 /*
 * Retrieves original name of the compressed file from the log.
+* const char *filename_log - name of the log file.
+* const char *comp_filename - string with the name of the comressed file.
+* Returns NULL pointer on failure or string with the name of the original file.
 */
-int log_retrieve_name(const char *filename_log, char **string) {
+char *log_retrieve_name(const char *filename_log, const char *comp_name) {
+	FILE *log_file = fopen(filename_log, "r");
+	LOGGED_FILE *entries = NULL;
+	size_t size;
+	char *orig_name = NULL;
+	if (log_file == NULL) {
+		return NULL;
+	}
 
-	return 0;
+	size = read_log(log_file, &entries);
+	fclose(log_file);
+
+	for (size_t i = 0; i < size; i++) {
+		if (!strcmp(entries[i].comp_name, comp_name)) {
+			orig_name = entries[i].orig_name;
+			free(entries[i].comp_name);
+		}
+		else {
+			free(entries[i].comp_name);
+			free(entries[i].orig_name);
+		}
+	}
+
+	free(entries);
+	entries = NULL;
+	return orig_name;
 }
 
 /*
 * Appends entry in a log file.
 * Rewrites entry if the same name is encountered.
+* const char *filename_log - name of the log file.
+* const char *orig_name - string with the name of the original file.
+* const size_t orig_size - size of the original file.
+* const uint16_t crc - 2 byte crc of the original file.
+* const size_t comp_size - size of the compressed file.
+* const char *comp_name - string with the name of the comressed file.
 * Returns 1 on error. 0 on success.
 */
 int log_add_entry(const char *filename_log, const char *orig_name, const size_t orig_size, const uint16_t crc, const size_t comp_size, const char *comp_name) {
@@ -232,6 +289,7 @@ int log_add_entry(const char *filename_log, const char *orig_name, const size_t 
 
 /*
 * Clears out all '\n' and '\r' from the string.
+* char **string - string to clear from newline characters.
 */
 void clear_newlines(char **string) {
 	if (*string == NULL) return; //String doesn't exist -> escape.
@@ -251,6 +309,8 @@ void clear_newlines(char **string) {
 
 /*
 * Reads opened log file into the LOGGED_FILE structure array.
+* FILE *log_file - opened log file for reading.
+* LOGGED_FILE **entries - NULL pointer to the entries array. Every single logged file data will be returned into this dynamicly allocated array.
 * Returns number of read entries. (lines)
 */
 size_t read_log(FILE *log_file, LOGGED_FILE **entries) {
