@@ -13,7 +13,7 @@ int view_log(const char *filename_log) {
 		return 1;
 	}
 	
-	//Show the log file. (not demanded, but why not?)
+	//TODO: Show the log file. (not demanded, but why not?)
 
 	fclose(log_file);
 	return 0;
@@ -63,9 +63,11 @@ int file_in(FILE *file, uint8_t **data, size_t *size) {
 * Writes all data contents into the file.
 * Returns 1 on error. 0 on success.
 */
-int file_out(FILE *file, const uint8_t *data, const size_t size) {
-	if (file == NULL) return 1;
-
+int file_out(FILE *file, const uint8_t *data, const size_t size, const uint16_t crc) {
+	if (file == NULL) return 1; //file must be provided.
+	
+	fwrite(&crc, 2, 1, file); //Add crc as a header.
+	//Write all data contents to the file.
 	for (size_t i = 0; i < size; i++) {
 		fwrite(&data[i], 1, 1, file);
 	}
@@ -96,9 +98,9 @@ int get_new_name(char **string) {
 
 	//Building up the extension and terminating string.
 	string[0][pos] = '.';
-	string[0][pos + 1] = 'b';
-	string[0][pos + 2] = 'm';
-	string[0][pos + 3] = 'p';
+	string[0][pos + 1] = 'r';
+	string[0][pos + 2] = 'l';
+	string[0][pos + 3] = 'e';
 	string[0][pos + 4] = '\0';
 	
 	//Memory reallocation
@@ -113,16 +115,223 @@ int get_new_name(char **string) {
 
 /*
 * Checks log entries for given filename.
+* True - entry exists, false - no such entry found.
 */
-bool log_check_entry(const char *filename) {
-    
+bool log_check_entry(const char *filename_log, const char *comp_filename) {
+	FILE *log_file = fopen(filename_log, "r");
+	if (log_file == NULL) { //File must exist
+		return false;
+	}
+	else {
+		uint8_t colon_count = 0; //Counts colons met.
+		char *line = malloc(MAX_LINESIZE); //line from log file.
+		char *line_ptr; //Pointer to the place in line.
+
+		if (line != NULL) {
+			while (!feof(log_file) && !ferror(log_file)) {
+				colon_count = 0;
+				if (fgets(line, MAX_LINESIZE, log_file) != NULL) {
+					line_ptr = line - 1; //Line pointer to the start. (one element back because of moving it forward in the start of the loop)
+					while (colon_count < 4) { //Stop on the fourth colon.
+						line_ptr++;
+						if (*line_ptr == ':') {
+							colon_count++;
+						}
+					}
+					line_ptr += 2; //Moving pointer 2 elements forward on the start of the compressed file name.
+					clear_newlines(&line_ptr);
+					if (!strcmp(line_ptr, comp_filename)) {
+						free(line);
+						line = NULL;
+
+						rewind(log_file);
+						fclose(log_file);
+						return true;
+					}
+				}
+			}
+		}
+		free(line);
+		line = NULL;
+	}
+	rewind(log_file);
+	fclose(log_file);
     return false;
 }
 
 /*
 * Retrieves original name of the compressed file from the log.
 */
-int log_retrieve_name(char **string) {
+int log_retrieve_name(const char *filename_log, char **string) {
 
 	return 0;
+}
+
+/*
+* Appends entry in a log file.
+* Rewrites entry if the same name is encountered.
+* Returns 1 on error. 0 on success.
+*/
+int log_add_entry(const char *filename_log, const char *orig_name, const size_t orig_size, const uint16_t crc, const size_t comp_size, const char *comp_name) {
+	FILE *log_file;
+	if (log_check_entry(filename_log, comp_name)) {
+		LOGGED_FILE *entries = NULL;
+		size_t count = 0;
+		//SAME ENTRY
+		//It is possible that compressed file was rewritten with contents of different file. (e.g. "a.txt" and "a.png" both will produce "a.bmp")
+		log_file = fopen(filename_log, "r");
+		count = read_log(log_file, &entries);
+		if (count == 0) {
+			printf("Error occured while reading log file.\nPossible causes:\n1. Incorrect log formatting. It is not expected to be modified manually.\n2. Memory error.\n\n");
+			return 1;
+		}
+		else {
+			size_t i = 0;
+			char *temp_string;
+			//Copy original name.
+			for (i = 0; strcmp(entries[i].comp_name, comp_name); i++);
+			temp_string = realloc(entries[i].orig_name, (strlen(orig_name) + 1) * sizeof(char));
+			if (temp_string == NULL) { //Realloc failed. Memory error.
+				return 1;
+			}
+			entries[i].orig_name = temp_string; //Getting pointer back.
+
+			//Rewriting entry.
+			strcpy(entries[i].orig_name, orig_name);
+			entries[i].orig_size = orig_size;
+			entries[i].crc = crc;
+			entries[i].comp_size = comp_size;
+		}
+		fclose(log_file);
+
+		log_file = fopen(filename_log, "w");
+		//Filling file with entries from scratch.
+		for (size_t i = 0; i < count; i++) {
+			fprintf(log_file, "%s : %d : %d : %d : %s\n", entries[i].orig_name, entries[i].orig_size, entries[i].crc, entries[i].comp_size, entries[i].comp_name);
+		}
+		fclose(log_file);
+
+		//Free memory allocated for entries.
+		for (size_t i = 0; i < count; i++) {
+#pragma warning (disable:6001) //Nope, they are initialized. count won't increase if they are not.
+			free(entries[i].comp_name);
+			free(entries[i].orig_name);
+#pragma warning (restore:6001)
+		}
+		free(entries);
+		entries = NULL;
+	}
+	else {
+		//NEW ENTRY
+		log_file = fopen(filename_log, "a");
+		fprintf(log_file, "%s : %d : %d : %d : %s\n", orig_name, orig_size, crc, comp_size, comp_name);
+		fclose(log_file);
+	}
+	return 0;
+}
+
+/*
+* Clears out all '\n' and '\r' from the string.
+*/
+void clear_newlines(char **string) {
+	if (*string == NULL) return; //String doesn't exist -> escape.
+
+	size_t i = 0;
+	size_t w = strlen(*string);
+	for (i = 0; i < w; i++) {
+		if (string[0][i] == '\n' || string[0][i] == '\r') {
+			for (size_t q = i + 1; q <= w; q++) {
+				string[0][q - 1] = string[0][q];
+			}
+			w--;
+			i--;
+		}
+	}
+}
+
+/*
+* Reads opened log file into the LOGGED_FILE structure array.
+* Returns number of read entries. (lines)
+*/
+size_t read_log(FILE *log_file, LOGGED_FILE **entries) {
+	size_t count = 0; //Count of lines (entries)
+	char *line = malloc(MAX_LINESIZE + 1); //Line from log.
+	char *line_ptr; //Pointer to certain char in line.
+	size_t pos = 0; //Position on line
+	if (*entries != NULL) {
+		free(*entries);
+		*entries = NULL;
+	}
+	*entries = malloc(sizeof(LOGGED_FILE));
+
+	if (*entries == NULL || line == NULL) { //Memory error
+		return count;
+	}
+
+	while (fgets(line, MAX_LINESIZE, log_file) != NULL && line != NULL) {
+		LOGGED_FILE *temp_entry = NULL;
+		uint8_t colon_count = 0;
+		line_ptr = line;
+		pos = 0;
+		unsigned int crc;
+
+		clear_newlines(&line);
+		//Getting original name.
+		while (*line_ptr != ':') {
+			line_ptr++;
+			pos++;
+		}
+		colon_count++;
+		entries[0][count].orig_name = malloc(pos * sizeof(char));
+		if (entries[0][count].orig_name == NULL) { //Memory error.
+			free(line);
+			line = NULL;
+			return count;
+		}
+		for (size_t i = 0; i < pos - 1; i++) {
+			entries[0][count].orig_name[i] = line[i];
+		}
+		entries[0][count].orig_name[pos - 1] = '\0';
+		pos += 2; //Saving position of the first number.
+
+		//Getting compressed name.
+		while (colon_count < 4) {
+			line_ptr++;
+			if (*line_ptr == ':') colon_count++;
+		}
+		line_ptr += 2; //Start of the compressed name.
+		entries[0][count].comp_name = malloc((strlen(line_ptr) + 1) * sizeof(char));
+		if (entries[0][count].comp_name == NULL) { //Memory error.
+			free(line);
+			line = NULL;
+			return count;
+		}
+		strcpy(entries[0][count].comp_name, line_ptr);
+		line_ptr -= 3; //Returning back before the ':'
+		*line_ptr = '\0'; //Changing ' ' into '\0'
+		//Getting numbers.
+		line_ptr = &line[pos];
+		if (sscanf(line_ptr, "%d : %d : %d", &entries[0][count].orig_size, &crc, &entries[0][count].comp_size) != 3) {
+			free(line);
+			line = NULL;
+			return count; //Incorrect formatting!? Someone messed up log file.
+		}
+		entries[0][count].crc = (uint16_t)crc;
+
+		//Counting it as a full line.
+		count++;
+		//Reallocating memory for entries array.
+		temp_entry = realloc(*entries, (count + 1) * sizeof(LOGGED_FILE));
+		if (temp_entry == NULL) { //Reallocation failed. Memory error.
+			free(line);
+			line = NULL;
+			return count;
+		}
+		*entries = temp_entry; //Getting pointer back.
+	}
+
+	free(line);
+	line = NULL;
+
+	return count;
 }

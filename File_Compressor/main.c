@@ -56,8 +56,10 @@ static int handle_rle_pack(const char *filename_to_pack) {
 	FILE *file_to_pack = fopen(filename_to_pack, "rb");
 	uint8_t *fbytes = NULL; //Array of bytes from the file.
 	size_t size = 0; //Size of an array of bytes.
+	size_t orig_size = 0; //Size of the original data array.
 	char *new_filename = NULL; //New name for file.
-	int check = 0;
+	int error = 0;
+	uint16_t crc; //crc of the original data.
 
 	new_filename = malloc((strlen(filename_to_pack) + 1) * sizeof(char));
 
@@ -67,9 +69,9 @@ static int handle_rle_pack(const char *filename_to_pack) {
 
 	strcpy(new_filename, filename_to_pack); //Getting old name first.
 
-	check = file_in(file_to_pack, &fbytes, &size); //Getting file contents.
+	error = file_in(file_to_pack, &fbytes, &size); //Getting file contents.
 	fclose(file_to_pack); //Closing file.
-	if (!check) {
+	if (!error) {
 #if DEBUG
 		printf("Data array:\n");
 		for (unsigned int i = 0; i < size; i++) {
@@ -77,6 +79,8 @@ static int handle_rle_pack(const char *filename_to_pack) {
 		}
 		printf("\n\n");
 #endif
+		crc = crc16(fbytes, size); //Counting crc.
+		orig_size = size;
 		rle_pack(&fbytes, &size); //Compressing file contents.
 #if DEBUG
 		printf("New array:\n");
@@ -91,12 +95,17 @@ static int handle_rle_pack(const char *filename_to_pack) {
 #endif
 
 		file_to_pack = fopen(new_filename, "wb");
-		file_out(file_to_pack, fbytes, size);
+		file_out(file_to_pack, fbytes, size, crc);
 		fclose(file_to_pack);
 		
-		//log_add_entry(); //filename_to_pack - .* + .bmp
+		free(fbytes);
+		fbytes = NULL;
+
+		log_add_entry(LOG_FILENAME, filename_to_pack, orig_size, crc, size, new_filename);
 	}
-	
+
+	free(new_filename);
+	new_filename = NULL;
 	
 	return 0;
 }
@@ -316,8 +325,10 @@ static void command_get_filename(const char *command_string, char **filename) {
 		filename[0][i] = filename_ptr[i];
 	}
 	//Terminating string ion the end or on '\n'
+#pragma warning (disable:6001) //It is initialized.
 	if (filename[0][length - 1] == '\n') filename[0][length - 1] = '\0';
 	else filename[0][length] = '\0';
+#pragma warning (restore:6001)
 
 	//If have nothing -> Null the pinter not to be confused.
 	if (length == 0) {
