@@ -76,11 +76,14 @@ static int handle_rle_pack(const char *filename_to_pack) {
 #if DEBUG
 		printf("Data array:\n");
 		for (unsigned int i = 0; i < size; i++) {
-			printf("%c", fbytes[i]);
+			printf("%2x", fbytes[i]);
 		}
 		printf("\n\n");
 #endif
 		crc = crc16(fbytes, size); //Counting crc.
+#if DEBUG
+		printf("CRC = %2x\n", crc);
+#endif
 		orig_size = size;
 		rle_pack(&fbytes, &size); //Compressing file contents.
 #if DEBUG
@@ -117,26 +120,54 @@ static int handle_rle_pack(const char *filename_to_pack) {
 */
 static int handle_rle_unpack(const char *filename_to_unpack) {
 	FILE *file_to_unpack = fopen(filename_to_unpack, "rb");
+	if (file_to_unpack == NULL) {
+		return 1;
+	}
+	FILE *created_file;
 	uint8_t *fbytes = NULL; //Array of bytes from the file.
 	size_t size = 0; //Size of an array of bytes.
+	uint16_t crc = 0; //Checksum of the original file.
 	char *new_filename = NULL; //New name for file.
 	int check = 0;
 
 	if (log_check_entry(LOG_FILENAME, filename_to_unpack)) {
-		check = file_in(filename_to_unpack, &fbytes, &size);
+		check = file_in(file_to_unpack, &fbytes, &size);
+#if DEBUG
+		printf("Data array:\n");
+		for (unsigned int i = 0; i < size; i++) {
+			printf("%2x", fbytes[i]);
+		}
+		printf("\n\n");
+#endif
 		if (!check) {
-			//rle_unpack();
-			//log_retrieve_name();
-			//file_out();
+			crc = rle_unpack(&fbytes, &size);
+#if DEBUG
+			printf("New array:\n");
+			for (unsigned int i = 0; i < size; i++) {
+				printf("%2x ", fbytes[i]);
+			}
+			printf("\n\n");
+#endif
+			if (crc == crc16(fbytes, size)) {
+				printf("Checksum is corred.\n");
+			}
+			else {
+				printf("WARNING! Incorrect checksum.\n");
+			}
+
+			created_file = fopen(log_retrieve_name(LOG_FILENAME, filename_to_unpack), "wb");
+			file_out(created_file, fbytes, size, 0);
+			fclose(created_file);
 
 			//log_remove_entry();
+			free(fbytes);
+			fbytes = NULL;
 		}
 	}
 	else {
 		//There is no entry in the log file.
-		//Much harder algorithm must be used to deal with that, which is not demanded by the task.
-		//Just prompt user with warning.
-		printf("Impossible to unpack \"%s\" file.\nIt was not packed by this program, or was already unpacked.\nPlease, check the log for files that can be unpacked.\n", filename_to_unpack);
+		printf("No entry!\n");
+		
 	}
 	
 
@@ -339,7 +370,7 @@ static void command_get_filename(const char *command_string, char **filename) {
 #pragma warning (disable:6001) //It is initialized.
 	if (filename[0][length - 1] == '\n') filename[0][length - 1] = '\0';
 	else filename[0][length] = '\0';
-#pragma warning (restore:6001)
+#pragma warning (default:6001)
 
 	//If have nothing -> Null the pinter not to be confused.
 	if (length == 0) {

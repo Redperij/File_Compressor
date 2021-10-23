@@ -20,4 +20,4 @@ size_t rle_pack(uint8_t **array, size_t *size);
 * uint8_t **array - pointer to the data array, which will be rle coded. (changed and resized)
 * size_t *size - pointer to the current size of an array. Will be changed according to the new array size.
 */
-size_t rle_unpack(uint8_t **array, size_t *size);
+uint16_t rle_unpack(uint8_t **array, size_t *size);

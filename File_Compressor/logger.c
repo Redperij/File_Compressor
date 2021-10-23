@@ -25,7 +25,7 @@ int view_log(const char *filename_log) {
 #pragma warning (disable:6001) //Nope, they are initialized. size won't increase if they are not.
 			free(entries[i].comp_name);
 			free(entries[i].orig_name);
-#pragma warning (restore:6001)
+#pragma warning (default:6001)
 		}
 	free(entries);
 	entries = NULL;
@@ -87,8 +87,11 @@ int file_in(FILE *file, uint8_t **data, size_t *size) {
 */
 int file_out(FILE *file, const uint8_t *data, const size_t size, const uint16_t crc) {
 	if (file == NULL) return 1; //file must be provided.
-	
-	if (crc != 0) fwrite(&crc, 2, 1, file); //Add crc as a header.
+	//Add crc as a header. (I have no idea, why fwrite() was wirting it backwards)
+	uint8_t temp = crc >> 8;
+	if (crc != 0) fwrite(&temp, sizeof(uint8_t), 1, file);
+	temp = crc;
+	if (crc != 0) fwrite(&temp, sizeof(uint8_t), 1, file);
 	//Write all data contents to the file.
 	for (size_t i = 0; i < size; i++) {
 		fwrite(&data[i], 1, 1, file);
@@ -273,7 +276,7 @@ int log_add_entry(const char *filename_log, const char *orig_name, const size_t 
 #pragma warning (disable:6001) //Nope, they are initialized. count won't increase if they are not.
 			free(entries[i].comp_name);
 			free(entries[i].orig_name);
-#pragma warning (restore:6001)
+#pragma warning (default:6001)
 		}
 		free(entries);
 		entries = NULL;
