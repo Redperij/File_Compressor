@@ -15,27 +15,22 @@ int main() {
 		switch (command)
 		{
 		case 1: //rle pack
-			DEBUGPRINT("Case 1 execution\n");
 			handle_rle_pack(filename);
 			free(filename);
 			filename = NULL;
 			break;
 		case 2: //rle unpack
-			DEBUGPRINT("Case 2 execution\n");
 			handle_rle_unpack(filename);
 			free(filename);
 			filename = NULL;
 			break;
 		case 3: //view log
-			DEBUGPRINT("Case 3 execution\n");
 			view_log(LOG_FILENAME);
 			break;
 		case 4: //print menu
-			DEBUGPRINT("Case 4 execution\n");
 			print_menu();
 			break;
 		case 5: //exit
-			DEBUGPRINT("Case 5 execution\n");
 			printf("Exitting program.\n");
 			break;
 		default:
@@ -73,6 +68,7 @@ static int handle_rle_pack(const char *filename_to_pack) {
 	error = file_in(file_to_pack, &fbytes, &size); //Getting file contents.
 	fclose(file_to_pack); //Closing file.
 	if (!error) {
+
 #if DEBUG
 		printf("Data array:\n");
 		for (unsigned int i = 0; i < size; i++) {
@@ -80,12 +76,16 @@ static int handle_rle_pack(const char *filename_to_pack) {
 		}
 		printf("\n\n");
 #endif
+
 		crc = crc16(fbytes, size); //Counting crc.
+
 #if DEBUG
 		printf("CRC = %2x\n", crc);
 #endif
+
 		orig_size = size;
 		rle_pack(&fbytes, &size); //Compressing file contents.
+
 #if DEBUG
 		printf("New array:\n");
 		for (unsigned int i = 0; i < size; i++) {
@@ -93,10 +93,8 @@ static int handle_rle_pack(const char *filename_to_pack) {
 		}
 		printf("\n\n");
 #endif
+
 		get_new_name(&new_filename); //Getting new file name (One with .bmp extension).
-#if DEBUG
-		printf("Creating %s file\n", new_filename);
-#endif
 
 		file_to_pack = fopen(new_filename, "wb");
 		file_out(file_to_pack, fbytes, size, crc);
@@ -105,7 +103,8 @@ static int handle_rle_pack(const char *filename_to_pack) {
 		free(fbytes);
 		fbytes = NULL;
 
-		log_add_entry(LOG_FILENAME, filename_to_pack, orig_size, crc, size, new_filename, true);
+		log_add_entry(LOG_FILENAME, filename_to_pack, orig_size, crc, size + 2, new_filename, true);
+		printf("Successfully packed \"%s\" (%d b) file into \"%s\" (%d b)\n\n", filename_to_pack, orig_size, new_filename, size + 2);
 	}
 
 	free(new_filename);
@@ -117,6 +116,7 @@ static int handle_rle_pack(const char *filename_to_pack) {
 /*
 * Handles file decompression sequence.
 * const char *filename_to_unpack - name of the file to unpack. (must be logged, if it is not - nothing will be done)
+* Returns 1 in case of an error. 0 on success.
 */
 static int handle_rle_unpack(const char *filename_to_unpack) {
 	FILE *file_to_unpack = fopen(filename_to_unpack, "rb");
@@ -135,6 +135,7 @@ static int handle_rle_unpack(const char *filename_to_unpack) {
 
 	check = file_in(file_to_unpack, &fbytes, &size);
 	comp_size = size;
+
 #if DEBUG
 	printf("Data array:\n");
 	for (unsigned int i = 0; i < size; i++) {
@@ -142,21 +143,35 @@ static int handle_rle_unpack(const char *filename_to_unpack) {
 	}
 	printf("\n\n");
 #endif
+
 	if (!check) {
 		crc = rle_unpack(&fbytes, &size);
-#if DEBUG
-		printf("New array:\n");
-		for (unsigned int i = 0; i < size; i++) {
-			printf("%2x ", fbytes[i]);
+
+		if (fbytes == NULL) { //Must receive at least something to work with.
+			return 1;
 		}
-		printf("\n\n");
-#endif
-		if (crc == crc16(fbytes, size)) {
-			printf("Checksum is correct.\n");
+
+		#if DEBUG
+			printf("New array:\n");
+			for (unsigned int i = 0; i < size; i++) {
+				printf("%2x ", fbytes[i]);
+			}
+			printf("\n\n");
+
+			printf("CRC from file: %2x\nCounted CRC: %2x\n", crc, crc16(fbytes, size));
+		#endif
+		
+		if (crc != crc16(fbytes, size)) {
+			printf("WARNING! Incorrect checksum.\nFile \"%s\" (%d b) cannot be unpacked.\n", filename_to_unpack, comp_size);
+			return 1;
 		}
-		else {
-			printf("WARNING! Incorrect checksum.\n");
-		}
+
+		#if DEBUG
+			else {
+				printf("Checksum is correct.\n");
+			}
+		#endif
+
 		//There is entry in the log. Retrieve original name with extension.
 		if (log_check_entry(LOG_FILENAME, filename_to_unpack, crc)) {
 			char *original_name;
@@ -172,9 +187,8 @@ static int handle_rle_unpack(const char *filename_to_unpack) {
 				fclose(created_file);
 				//Log.
 				log_add_entry(LOG_FILENAME, original_name, size, crc, comp_size, filename_to_unpack, false);
+				printf("Successfully unpacked \"%s\" (%d b) file into \"%s\" (%d b)\n\n", filename_to_unpack, comp_size, original_name, size);
 			}
-			//free(original_name);
-			//original_name = NULL;
 		}
 		//No log entry found. Just remove extension.
 		else {
@@ -193,6 +207,7 @@ static int handle_rle_unpack(const char *filename_to_unpack) {
 				fclose(created_file);
 				//Log.
 				log_add_entry(LOG_FILENAME, original_name, size, crc, comp_size, filename_to_unpack, false);
+				printf("Successfully unpacked \"%s\" file into \"%s\"\n\n", filename_to_unpack, original_name);
 			}
 			free(original_name);
 			original_name = NULL;

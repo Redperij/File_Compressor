@@ -14,6 +14,7 @@ typedef struct logged_file {
 /*
 * Prints log to the user.
 * const char *filename_log - name of the log file.
+* Returns 1 on error. 0 on success.
 */
 int view_log(const char *filename_log);
 
@@ -48,7 +49,7 @@ int get_new_name(char **string);
 * const char *filename_log - name of the log file.
 * const char *comp_filename - string with the name of the comressed file.
 * const uint16_t crc - Checksum must match in order to recognize file.
-* True - entry exists, false - no such entry found.
+* Returns 'true' if entry exists, 'false' if no such entry found.
 */
 bool log_check_entry(const char *filename_log, const char *comp_filename, const uint16_t crc);
 
@@ -63,7 +64,6 @@ char *log_retrieve_name(const char *filename_log, const char *comp_name, const u
 
 /*
 * Appends entry in a log file.
-* Rewrites entry if the same name is encountered.
 * const char *filename_log - name of the log file.
 * const char *orig_name - string with the name of the original file.
 * const size_t orig_size - size of the original file.
@@ -84,7 +84,7 @@ void clear_newlines(char **string);
 /*
 * Reads opened log file into the LOGGED_FILE structure array.
 * FILE *log_file - opened log file for reading.
-* LOGGED_FILE **entries - pointer to the entries array. Every single logged file data will be returned into this array.
+* LOGGED_FILE **entries - NULL pointer to the entries array. Every single logged file data will be returned into this dynamicly allocated array.
 * Returns number of read entries. (lines)
 */
 size_t read_log(FILE *log_file, LOGGED_FILE **entries);

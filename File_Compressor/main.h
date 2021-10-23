@@ -7,15 +7,9 @@
 #include <string.h>
 #include <ctype.h>
 
-#define DEBUG 1
+#define DEBUG 0
 #define MAX_FILENAME 256
 #define MAX_COMMAND 266
-
-#ifdef DEBUG
-#define DEBUGPRINT(x) printf(x)
-#else
-#define DEBUGPRINT(x)
-#endif // DEBUG
 
 #define LOG_FILENAME "rle_compressed.log"
 
@@ -29,6 +23,7 @@ static int handle_rle_pack(const char *filename_to_pack);
 /*
 * Handles file decompression sequence.
 * const char *filename_to_unpack - name of the file to unpack. (must be logged, if it is not - nothing will be done)
+* Returns 1 in case of an error. 0 on success.
 */
 static int handle_rle_unpack(const char *filename_to_unpack);
 

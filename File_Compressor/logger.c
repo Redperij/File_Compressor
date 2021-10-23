@@ -13,11 +13,12 @@
 /*
 * Prints log to the user.
 * const char *filename_log - name of the log file.
+* Returns 1 on error. 0 on success.
 */
 int view_log(const char *filename_log) {
 	FILE *log_file = fopen(filename_log, "r");
-	LOGGED_FILE *entries = NULL;
-	size_t size;
+	LOGGED_FILE *entries = NULL; //Array with entries from log file.
+	size_t size; //size of the entries array.
 
 	if (log_file == NULL) {
 		printf("Log is empty. No files are encrypted.\n");
@@ -25,9 +26,13 @@ int view_log(const char *filename_log) {
 	}
 
 	size = read_log(log_file, &entries);
-	//TODO: Show the log file. (not demanded, but why not?)
+	printf("Operation     | Original name of the file      | Original size   | CRC  | Compressed size | Compressed name of the file   \n");
+	for (int i = 0; i < size; i++) {
+		printf("%-13s | %-30s | %13d b | %2x | %13d b | %-30s\n", entries[i].compressed ? COMPRESSED_KEY : DECOMPRESSED_KEY, entries[i].orig_name, entries[i].orig_size, entries[i].crc, entries[i].comp_size, entries[i].comp_name);
+	}
+	printf("\n\n");
 
-
+	//Free memory.
 	for (size_t i = 0; i < size; i++) {
 #pragma warning (disable:6001) //Nope, they are initialized. size won't increase if they are not.
 			free(entries[i].comp_name);
@@ -152,7 +157,7 @@ int get_new_name(char **string) {
 * const char *filename_log - name of the log file.
 * const char *comp_filename - string with the name of the comressed file.
 * const uint16_t crc - Checksum must match in order to recognize file.
-* True - entry exists, false - no such entry found.
+* Returns 'true' if entry exists, 'false' if no such entry found.
 */
 bool log_check_entry(const char *filename_log, const char *comp_filename, const uint16_t crc) {
 	FILE *log_file = fopen(filename_log, "r");

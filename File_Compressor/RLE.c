@@ -12,6 +12,7 @@
 * CRC-calculation.
 * const uint8_t *data_p - data array for which crc is calculated.
 * unsigned int length - length of the data array.
+* Returns counted 16 bit crc.
 */
 uint16_t crc16(const uint8_t *data_p, unsigned int length) {
 	uint8_t x;
@@ -48,7 +49,7 @@ size_t rle_pack(uint8_t **array, size_t *size) {
 			created_array[q + 2] = array[0][i]; //Third byte means repeating character.
 			i++; //Moving one byte forward.
 			//Loop through all occurances until it is possible to fill their count in one byte.
-			while (i < *size && created_array[q + 1] <= 255 && created_array[q + 2] == array[0][i]) {
+			while (i < *size && created_array[q + 1] <= 254 && created_array[q + 2] == array[0][i]) {
 				created_array[q + 1]++; //Adding it to the count.
 				i++; //Moving to next byte.
 			}
@@ -63,7 +64,7 @@ size_t rle_pack(uint8_t **array, size_t *size) {
 				created_array[q + 2] = SPECIAL_CHARACTER; //Append itself after number of repetitions as demanded in the rle.
 				i++; //Moving to next byte.
 				//Loop through all occurances until it is possible to fill their count in one byte.
-				while (i < *size && created_array[q + 1] <= 255 && array[0][i] == SPECIAL_CHARACTER) {
+				while (i < *size && created_array[q + 1] <= 254 && array[0][i] == SPECIAL_CHARACTER) {
 					created_array[q + 1]++; //Adding it to the count.
 					i++; //Moving to next byte.
 				}
@@ -85,7 +86,7 @@ size_t rle_pack(uint8_t **array, size_t *size) {
 
 /*
 * Decodes given data array by rle rules.
-* uint8_t **array - pointer to the data array, which will be rle coded. (changed and resized)
+* uint8_t **array - pointer to the data array, which will be rle coded. (changed and resized). Returned as NULL if wasn't able to revert at least 1 char.
 * size_t *size - pointer to the current size of an array. Will be changed according to the new array size.
 * Returns 16 bit crc on success and 0 on failure.
 */
@@ -93,6 +94,12 @@ uint16_t rle_unpack(uint8_t **array, size_t *size) {
 	uint16_t crc = 0; //crc from the header of the file.
 	size_t new_size = 0; //Size of the newly created array. Will be passed to the size pointer.
 	uint8_t *new_array = NULL;
+
+	if (*size < 2) {
+		free(*array);
+		*array = NULL;
+		return 0;
+	}
 
 	//Two first bytes are always crc.
 	crc += array[0][0];
@@ -151,18 +158,25 @@ uint16_t rle_unpack(uint8_t **array, size_t *size) {
 	}
 	//Get new size.
 	*size = new_size;
-	//Reallocating memory.
-	uint8_t *temp_arr = realloc(*array, (*size) * sizeof(uint8_t));
-	if (temp_arr == NULL) { //Reallocation failed. Memory error.
-		free(new_array);
-		new_array = NULL;
-		return 0;
+	if (*size != 0) {
+		//Reallocating memory.
+		uint8_t *temp_arr = realloc(*array, (*size) * sizeof(uint8_t));
+		if (temp_arr == NULL) { //Reallocation failed. Memory error.
+			free(new_array);
+			new_array = NULL;
+			return 0;
+		}
+		*array = temp_arr; //Retrieve pointer.
+		//Rewrite contents to the returned array.
+		for (size_t i = 0; i < (*size); i++) {
+			array[0][i] = new_array[i];
+		}
 	}
-	*array = temp_arr; //Retrieve pointer.
-	//Rewrite contents to the returned array.
-	for (size_t i = 0; i < (*size); i++) {
-		array[0][i] = new_array[i];
+	else {
+		free(*array);
+		*array = NULL;
 	}
+	
 
 	free(new_array);
 	new_array = NULL;
