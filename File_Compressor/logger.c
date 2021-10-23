@@ -205,7 +205,7 @@ char *log_retrieve_name(const char *filename_log, const char *comp_name, const u
 	FILE *log_file = fopen(filename_log, "r");
 	LOGGED_FILE *entries = NULL;
 	size_t size;
-	char *orig_name = malloc(sizeof(MAX_FILENAME));
+	char *orig_name = malloc(MAX_FILENAME * sizeof(char));
 	if (log_file == NULL || orig_name == NULL) {
 		return NULL;
 	}
@@ -233,7 +233,7 @@ char *log_retrieve_name(const char *filename_log, const char *comp_name, const u
 		free(orig_name);
 		orig_name = NULL;
 	}
-	
+
 	return orig_name;
 }
 

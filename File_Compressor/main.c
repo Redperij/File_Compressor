@@ -163,6 +163,8 @@ static int handle_rle_unpack(const char *filename_to_unpack) {
 		
 		if (crc != crc16(fbytes, size)) {
 			printf("WARNING! Incorrect checksum.\nFile \"%s\" (%d b) cannot be unpacked.\n", filename_to_unpack, comp_size);
+			free(fbytes);
+			fbytes = NULL;
 			return 1;
 		}
 
@@ -174,7 +176,7 @@ static int handle_rle_unpack(const char *filename_to_unpack) {
 
 		//There is entry in the log. Retrieve original name with extension.
 		if (log_check_entry(LOG_FILENAME, filename_to_unpack, crc)) {
-			char *original_name;
+			char *original_name = NULL;
 			//Retrieve name from log.
 			original_name = log_retrieve_name(LOG_FILENAME, filename_to_unpack, crc);
 			if (original_name == NULL) {
@@ -189,6 +191,8 @@ static int handle_rle_unpack(const char *filename_to_unpack) {
 				log_add_entry(LOG_FILENAME, original_name, size, crc, comp_size, filename_to_unpack, false);
 				printf("Successfully unpacked \"%s\" (%d b) file into \"%s\" (%d b)\n\n", filename_to_unpack, comp_size, original_name, size);
 			}
+			free(original_name);
+			original_name = NULL;
 		}
 		//No log entry found. Just remove extension.
 		else {
