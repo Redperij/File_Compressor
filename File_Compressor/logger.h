@@ -1,6 +1,7 @@
 #pragma warning(disable:4996) //disabling warning
 
 typedef struct logged_file {
+	bool compressed;
 	char *orig_name;
 	size_t orig_size;
 	uint16_t crc;
@@ -43,20 +44,22 @@ int file_out(FILE *file, const uint8_t *data, const size_t size, const uint16_t 
 int get_new_name(char **string);
 
 /*
-* Checks log entries for given filename.
+* Checks log entries for given filename and checksum.
 * const char *filename_log - name of the log file.
 * const char *comp_filename - string with the name of the comressed file.
+* const uint16_t crc - Checksum must match in order to recognize file.
 * True - entry exists, false - no such entry found.
 */
-bool log_check_entry(const char *filename_log, const char *comp_filename);
+bool log_check_entry(const char *filename_log, const char *comp_filename, const uint16_t crc);
 
 /*
-* Retrieves original name of the compressed file from the log.
+* Retrieves last original name of the compressed file with the same crc from the log.
 * const char *filename_log - name of the log file.
 * const char *comp_filename - string with the name of the comressed file.
+* const uint16_t crc - Checksum must match in order to recognize file.
 * Returns NULL pointer on failure or string with the name of the original file.
 */
-char *log_retrieve_name(const char *filename_log, const char *comp_name);
+char *log_retrieve_name(const char *filename_log, const char *comp_name, const uint16_t crc);
 
 /*
 * Appends entry in a log file.
@@ -67,9 +70,10 @@ char *log_retrieve_name(const char *filename_log, const char *comp_name);
 * const uint16_t crc - 2 byte crc of the original file.
 * const size_t comp_size - size of the compressed file.
 * const char *comp_name - string with the name of the comressed file.
+* const bool compressed - true if this file was compressed, false in case it is decompressed.
 * Returns 1 on error. 0 on success.
 */
-int log_add_entry(const char *filename_log, const char *orig_name, const size_t orig_size, const uint16_t crc, const size_t comp_size, const char *comp_name);
+int log_add_entry(const char *filename_log, const char *orig_name, const size_t orig_size, const uint16_t crc, const size_t comp_size, const char *comp_name, const bool compressed);
 
 /*
 * Clears out all '\n' and '\r' from the string.

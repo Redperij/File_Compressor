@@ -76,7 +76,7 @@ static int handle_rle_pack(const char *filename_to_pack) {
 #if DEBUG
 		printf("Data array:\n");
 		for (unsigned int i = 0; i < size; i++) {
-			printf("%2x", fbytes[i]);
+			printf("%2x ", fbytes[i]);
 		}
 		printf("\n\n");
 #endif
@@ -105,7 +105,7 @@ static int handle_rle_pack(const char *filename_to_pack) {
 		free(fbytes);
 		fbytes = NULL;
 
-		log_add_entry(LOG_FILENAME, filename_to_pack, orig_size, crc, size, new_filename);
+		log_add_entry(LOG_FILENAME, filename_to_pack, orig_size, crc, size, new_filename, true);
 	}
 
 	free(new_filename);
@@ -126,50 +126,81 @@ static int handle_rle_unpack(const char *filename_to_unpack) {
 	FILE *created_file;
 	uint8_t *fbytes = NULL; //Array of bytes from the file.
 	size_t size = 0; //Size of an array of bytes.
+	size_t comp_size = 0; //Used to save compressed file size before decompressing file.
 	uint16_t crc = 0; //Checksum of the original file.
 	char *new_filename = NULL; //New name for file.
 	int check = 0;
 
-	if (log_check_entry(LOG_FILENAME, filename_to_unpack)) {
-		check = file_in(file_to_unpack, &fbytes, &size);
+	//Don't give to unpack any file
+
+	check = file_in(file_to_unpack, &fbytes, &size);
+	comp_size = size;
 #if DEBUG
-		printf("Data array:\n");
+	printf("Data array:\n");
+	for (unsigned int i = 0; i < size; i++) {
+		printf("%2x ", fbytes[i]);
+	}
+	printf("\n\n");
+#endif
+	if (!check) {
+		crc = rle_unpack(&fbytes, &size);
+#if DEBUG
+		printf("New array:\n");
 		for (unsigned int i = 0; i < size; i++) {
-			printf("%2x", fbytes[i]);
+			printf("%2x ", fbytes[i]);
 		}
 		printf("\n\n");
 #endif
-		if (!check) {
-			crc = rle_unpack(&fbytes, &size);
-#if DEBUG
-			printf("New array:\n");
-			for (unsigned int i = 0; i < size; i++) {
-				printf("%2x ", fbytes[i]);
-			}
-			printf("\n\n");
-#endif
-			if (crc == crc16(fbytes, size)) {
-				printf("Checksum is corred.\n");
-			}
-			else {
-				printf("WARNING! Incorrect checksum.\n");
-			}
-
-			created_file = fopen(log_retrieve_name(LOG_FILENAME, filename_to_unpack), "wb");
-			file_out(created_file, fbytes, size, 0);
-			fclose(created_file);
-
-			//log_remove_entry();
-			free(fbytes);
-			fbytes = NULL;
+		if (crc == crc16(fbytes, size)) {
+			printf("Checksum is correct.\n");
 		}
+		else {
+			printf("WARNING! Incorrect checksum.\n");
+		}
+		//There is entry in the log. Retrieve original name with extension.
+		if (log_check_entry(LOG_FILENAME, filename_to_unpack, crc)) {
+			char *original_name;
+			//Retrieve name from log.
+			original_name = log_retrieve_name(LOG_FILENAME, filename_to_unpack, crc);
+			if (original_name == NULL) {
+				return 1;
+			}
+			//Write contents into the file.
+			created_file = fopen(original_name, "wb");
+			if (created_file != NULL) {
+				file_out(created_file, fbytes, size, 0);
+				fclose(created_file);
+				//Log.
+				log_add_entry(LOG_FILENAME, original_name, size, crc, comp_size, filename_to_unpack, false);
+			}
+			//free(original_name);
+			//original_name = NULL;
+		}
+		//No log entry found. Just remove extension.
+		else {
+			char *original_name = malloc(MAX_FILENAME * sizeof(char));
+			if (original_name == NULL) {
+				return 1;
+			}
+			printf("No log entry. File without extension will be created.\n");
+			strcpy(original_name, filename_to_unpack); //Copy current name.
+			original_name[strlen(original_name) - 4] = '\0'; //Terminate string before the extension.
+
+			//Write contents into the file.
+			created_file = fopen(original_name, "wb");
+			if (created_file != NULL) {
+				file_out(created_file, fbytes, size, 0);
+				fclose(created_file);
+				//Log.
+				log_add_entry(LOG_FILENAME, original_name, size, crc, comp_size, filename_to_unpack, false);
+			}
+			free(original_name);
+			original_name = NULL;
+		}
+
+		free(fbytes);
+		fbytes = NULL;
 	}
-	else {
-		//There is no entry in the log file.
-		printf("No entry!\n");
-		
-	}
-	
 
 	fclose(file_to_unpack);
 

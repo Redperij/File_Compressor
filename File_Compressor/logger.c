@@ -3,6 +3,13 @@
 #include "main.h"
 #include "logger.h"
 
+#ifndef COMPRESSED_KEY
+#define COMPRESSED_KEY "Compressed" //Must start from 'C'
+#endif // !COMPRESSED_KEY
+#ifndef DECOMPRESSED_KEY
+#define DECOMPRESSED_KEY "Decompressed" //Must not start from 'C'
+#endif // !DECOMPRESED_KEY
+
 /*
 * Prints log to the user.
 * const char *filename_log - name of the log file.
@@ -30,6 +37,7 @@ int view_log(const char *filename_log) {
 	free(entries);
 	entries = NULL;
 
+	rewind(log_file);
 	fclose(log_file);
 	return 0;
 }
@@ -90,7 +98,7 @@ int file_out(FILE *file, const uint8_t *data, const size_t size, const uint16_t 
 	//Add crc as a header. (I have no idea, why fwrite() was wirting it backwards)
 	uint8_t temp = crc >> 8;
 	if (crc != 0) fwrite(&temp, sizeof(uint8_t), 1, file);
-	temp = crc;
+	temp = crc; //Loss of data planned.
 	if (crc != 0) fwrite(&temp, sizeof(uint8_t), 1, file);
 	//Write all data contents to the file.
 	for (size_t i = 0; i < size; i++) {
@@ -140,153 +148,108 @@ int get_new_name(char **string) {
 }
 
 /*
-* Checks log entries for given filename.
+* Checks log entries for given filename and checksum.
 * const char *filename_log - name of the log file.
 * const char *comp_filename - string with the name of the comressed file.
+* const uint16_t crc - Checksum must match in order to recognize file.
 * True - entry exists, false - no such entry found.
 */
-bool log_check_entry(const char *filename_log, const char *comp_filename) {
+bool log_check_entry(const char *filename_log, const char *comp_filename, const uint16_t crc) {
 	FILE *log_file = fopen(filename_log, "r");
-	if (log_file == NULL) { //File must exist
+	LOGGED_FILE *entries = NULL;
+	size_t size = 0;
+
+	if (log_file == NULL) {
 		return false;
 	}
-	else {
-		uint8_t colon_count = 0; //Counts colons met.
-		char *line = malloc(MAX_LINESIZE); //line from log file.
-		char *line_ptr; //Pointer to the place in line.
 
-		if (line != NULL) {
-			while (!feof(log_file) && !ferror(log_file)) {
-				colon_count = 0;
-				if (fgets(line, MAX_LINESIZE, log_file) != NULL) {
-					line_ptr = line - 1; //Line pointer to the start. (one element back because of moving it forward in the start of the loop)
-					while (colon_count < 4) { //Stop on the fourth colon.
-						line_ptr++;
-						if (*line_ptr == ':') {
-							colon_count++;
-						}
-					}
-					line_ptr += 2; //Moving pointer 2 elements forward on the start of the compressed file name.
-					clear_newlines(&line_ptr);
-					if (!strcmp(line_ptr, comp_filename)) {
-						free(line);
-						line = NULL;
-
-						rewind(log_file);
-						fclose(log_file);
-						return true;
-					}
-				}
-			}
-		}
-		free(line);
-		line = NULL;
-	}
+	size = read_log(log_file, &entries);
 	rewind(log_file);
 	fclose(log_file);
+
+	if (size == 0) return false;
+
+	//Only entry with the same compressed name and checksum will return true.
+	for (size_t i = 0; i < size; i++) {
+		if (!strcmp(entries[i].comp_name, comp_filename) && crc == entries[i].crc && entries[i].compressed) {
+			return true;
+		}
+	}
+
+
+	for (size_t i = 0; i < size; i++) {
+#pragma warning (disable:6001) //Nope, they are initialized. size won't increase if they are not.
+		free(entries[i].comp_name);
+		free(entries[i].orig_name);
+#pragma warning (default:6001)
+	}
+	free(entries);
+	entries = NULL;
+
     return false;
 }
 
 /*
-* Retrieves original name of the compressed file from the log.
+* Retrieves last original name of the compressed file with the same crc from the log.
 * const char *filename_log - name of the log file.
 * const char *comp_filename - string with the name of the comressed file.
+* const uint16_t crc - Checksum must match in order to recognize file.
 * Returns NULL pointer on failure or string with the name of the original file.
 */
-char *log_retrieve_name(const char *filename_log, const char *comp_name) {
+char *log_retrieve_name(const char *filename_log, const char *comp_name, const uint16_t crc) {
 	FILE *log_file = fopen(filename_log, "r");
 	LOGGED_FILE *entries = NULL;
 	size_t size;
-	char *orig_name = NULL;
-	if (log_file == NULL) {
+	char *orig_name = malloc(sizeof(MAX_FILENAME));
+	if (log_file == NULL || orig_name == NULL) {
 		return NULL;
 	}
 
 	size = read_log(log_file, &entries);
+	rewind(log_file);
 	fclose(log_file);
-
-	for (size_t i = 0; i < size; i++) {
-		if (!strcmp(entries[i].comp_name, comp_name)) {
-			orig_name = entries[i].orig_name;
-			free(entries[i].comp_name);
+#pragma warning (disable:6001) //Nope, they are initialized. size won't increase if they are not.
+	if (entries != NULL) {
+		//Only entry with the same compressed name and checksum will return true.
+		for (size_t i = 0; i < size; i++) {
+			if (entries[i].comp_name != NULL && entries[i].orig_name != NULL && entries[i].compressed) {
+				if (!strcmp(entries[i].comp_name, comp_name) && crc == entries[i].crc) {
+					strcpy(orig_name, entries[i].orig_name);
+				}
+				free(entries[i].comp_name);
+				free(entries[i].orig_name);
+			}
 		}
-		else {
-			free(entries[i].comp_name);
-			free(entries[i].orig_name);
-		}
+#pragma warning (default:6001)
+		free(entries);
+		entries = NULL;
 	}
-
-	free(entries);
-	entries = NULL;
+	else {
+		free(orig_name);
+		orig_name = NULL;
+	}
+	
 	return orig_name;
 }
 
 /*
 * Appends entry in a log file.
-* Rewrites entry if the same name is encountered.
 * const char *filename_log - name of the log file.
 * const char *orig_name - string with the name of the original file.
 * const size_t orig_size - size of the original file.
 * const uint16_t crc - 2 byte crc of the original file.
 * const size_t comp_size - size of the compressed file.
 * const char *comp_name - string with the name of the comressed file.
+* const bool compressed - true if this file was compressed, false in case it is decompressed.
 * Returns 1 on error. 0 on success.
 */
-int log_add_entry(const char *filename_log, const char *orig_name, const size_t orig_size, const uint16_t crc, const size_t comp_size, const char *comp_name) {
+int log_add_entry(const char *filename_log, const char *orig_name, const size_t orig_size, const uint16_t crc, const size_t comp_size, const char *comp_name, const bool compressed) {
 	FILE *log_file;
-	if (log_check_entry(filename_log, comp_name)) {
-		LOGGED_FILE *entries = NULL;
-		size_t count = 0;
-		//SAME ENTRY
-		//It is possible that compressed file was rewritten with contents of different file. (e.g. "a.txt" and "a.png" both will produce "a.bmp")
-		log_file = fopen(filename_log, "r");
-		count = read_log(log_file, &entries);
-		if (count == 0) {
-			printf("Error occured while reading log file.\nPossible causes:\n1. Incorrect log formatting. It is not expected to be modified manually.\n2. Memory error.\n\n");
-			return 1;
-		}
-		else {
-			size_t i = 0;
-			char *temp_string;
-			//Copy original name.
-			for (i = 0; strcmp(entries[i].comp_name, comp_name); i++);
-			temp_string = realloc(entries[i].orig_name, (strlen(orig_name) + 1) * sizeof(char));
-			if (temp_string == NULL) { //Realloc failed. Memory error.
-				return 1;
-			}
-			entries[i].orig_name = temp_string; //Getting pointer back.
-
-			//Rewriting entry.
-			strcpy(entries[i].orig_name, orig_name);
-			entries[i].orig_size = orig_size;
-			entries[i].crc = crc;
-			entries[i].comp_size = comp_size;
-		}
-		fclose(log_file);
-
-		log_file = fopen(filename_log, "w");
-		//Filling file with entries from scratch.
-		for (size_t i = 0; i < count; i++) {
-			fprintf(log_file, "%s : %d : %d : %d : %s\n", entries[i].orig_name, entries[i].orig_size, entries[i].crc, entries[i].comp_size, entries[i].comp_name);
-		}
-		fclose(log_file);
-
-		//Free memory allocated for entries.
-		for (size_t i = 0; i < count; i++) {
-#pragma warning (disable:6001) //Nope, they are initialized. count won't increase if they are not.
-			free(entries[i].comp_name);
-			free(entries[i].orig_name);
-#pragma warning (default:6001)
-		}
-		free(entries);
-		entries = NULL;
-	}
-	else {
-		//NEW ENTRY
-		log_file = fopen(filename_log, "a");
-		fprintf(log_file, "%s : %d : %d : %d : %s\n", orig_name, orig_size, crc, comp_size, comp_name);
-		fclose(log_file);
-	}
+	char *operation = compressed ? COMPRESSED_KEY : DECOMPRESSED_KEY;
+	//NEW ENTRY
+	log_file = fopen(filename_log, "a");
+	fprintf(log_file, "%s : %s : %d : %d : %d : %s\n", operation, orig_name, orig_size, crc, comp_size, comp_name);
+	fclose(log_file);
 	return 0;
 }
 
@@ -334,17 +297,26 @@ size_t read_log(FILE *log_file, LOGGED_FILE **entries) {
 	while (fgets(line, MAX_LINESIZE, log_file) != NULL && line != NULL) {
 		LOGGED_FILE *temp_entry = NULL;
 		uint8_t colon_count = 0;
-		line_ptr = line;
-		pos = 0;
 		unsigned int crc;
+		char *helping_line_ptr = line;
+		pos = 0;
 
 		clear_newlines(&line);
+		//Figuring out if the file was compressed or decompressed by this program. (enough to check for 'C')
+		if(line[0] == 'C') entries[0][count].compressed = true;
+		else entries[0][count].compressed = false;
 		//Getting original name.
-		while (*line_ptr != ':') {
+		while (colon_count < 1) {
+			helping_line_ptr++;
+			if (*helping_line_ptr == ':') colon_count++;
+		}
+		helping_line_ptr += 2; //Moving line on the start of original name.
+		line_ptr = helping_line_ptr; //Getting line pointer to continue.
+		while (colon_count < 2) {
 			line_ptr++;
 			pos++;
+			if (*line_ptr == ':') colon_count++;
 		}
-		colon_count++;
 		entries[0][count].orig_name = malloc(pos * sizeof(char));
 		if (entries[0][count].orig_name == NULL) { //Memory error.
 			free(line);
@@ -352,13 +324,13 @@ size_t read_log(FILE *log_file, LOGGED_FILE **entries) {
 			return count;
 		}
 		for (size_t i = 0; i < pos - 1; i++) {
-			entries[0][count].orig_name[i] = line[i];
+			entries[0][count].orig_name[i] = helping_line_ptr[i];
 		}
 		entries[0][count].orig_name[pos - 1] = '\0';
 		pos += 2; //Saving position of the first number.
 
 		//Getting compressed name.
-		while (colon_count < 4) {
+		while (colon_count < 5) {
 			line_ptr++;
 			if (*line_ptr == ':') colon_count++;
 		}
@@ -373,7 +345,7 @@ size_t read_log(FILE *log_file, LOGGED_FILE **entries) {
 		line_ptr -= 3; //Returning back before the ':'
 		*line_ptr = '\0'; //Changing ' ' into '\0'
 		//Getting numbers.
-		line_ptr = &line[pos];
+		line_ptr = &helping_line_ptr[pos];
 		if (sscanf(line_ptr, "%d : %d : %d", &entries[0][count].orig_size, &crc, &entries[0][count].comp_size) != 3) {
 			free(line);
 			line = NULL;
