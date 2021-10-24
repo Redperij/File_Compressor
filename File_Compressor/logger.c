@@ -163,6 +163,7 @@ bool log_check_entry(const char *filename_log, const char *comp_filename, const 
 	FILE *log_file = fopen(filename_log, "r");
 	LOGGED_FILE *entries = NULL;
 	size_t size = 0;
+	bool flag = false; //flag signals if entry was met.
 
 	if (log_file == NULL) {
 		return false;
@@ -177,7 +178,8 @@ bool log_check_entry(const char *filename_log, const char *comp_filename, const 
 	//Only entry with the same compressed name and checksum will return true.
 	for (size_t i = 0; i < size; i++) {
 		if (!strcmp(entries[i].comp_name, comp_filename) && crc == entries[i].crc && entries[i].compressed) {
-			return true;
+			flag = true;
+			break; //No point to continue.
 		}
 	}
 
@@ -191,7 +193,7 @@ bool log_check_entry(const char *filename_log, const char *comp_filename, const 
 	free(entries);
 	entries = NULL;
 
-    return false;
+    return flag;
 }
 
 /*
@@ -215,15 +217,16 @@ char *log_retrieve_name(const char *filename_log, const char *comp_name, const u
 	fclose(log_file);
 #pragma warning (disable:6001) //Nope, they are initialized. size won't increase if they are not.
 	if (entries != NULL) {
-		//Only entry with the same compressed name and checksum will return true.
+		//Only entry with the same compressed name and checksum will take original name.
 		for (size_t i = 0; i < size; i++) {
 			if (entries[i].comp_name != NULL && entries[i].orig_name != NULL && entries[i].compressed) {
 				if (!strcmp(entries[i].comp_name, comp_name) && crc == entries[i].crc) {
 					strcpy(orig_name, entries[i].orig_name);
 				}
-				free(entries[i].comp_name);
-				free(entries[i].orig_name);
 			}
+			//Free memory.
+			free(entries[i].comp_name);
+			free(entries[i].orig_name);
 		}
 #pragma warning (default:6001)
 		free(entries);
@@ -303,7 +306,7 @@ size_t read_log(FILE *log_file, LOGGED_FILE **entries) {
 		LOGGED_FILE *temp_entry = NULL;
 		uint8_t colon_count = 0;
 		unsigned int crc;
-		char *helping_line_ptr = line;
+		char *helping_line_ptr = line; //Since there are two filenames, which can have whitespaces in them - reading is pretty difficult.
 		pos = 0;
 
 		clear_newlines(&line);

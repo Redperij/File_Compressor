@@ -134,6 +134,7 @@ static int handle_rle_unpack(const char *filename_to_unpack) {
 	//Don't give to unpack any file
 
 	check = file_in(file_to_unpack, &fbytes, &size);
+	fclose(file_to_unpack);
 	comp_size = size;
 
 #if DEBUG
@@ -148,6 +149,7 @@ static int handle_rle_unpack(const char *filename_to_unpack) {
 		crc = rle_unpack(&fbytes, &size);
 
 		if (fbytes == NULL) { //Must receive at least something to work with.
+			printf("WARNING!\nFile \"%s\" (%d b) cannot be unpacked.\n", filename_to_unpack, size);
 			return 1;
 		}
 
@@ -220,8 +222,6 @@ static int handle_rle_unpack(const char *filename_to_unpack) {
 		free(fbytes);
 		fbytes = NULL;
 	}
-
-	fclose(file_to_unpack);
 
 	return 0;
 }
